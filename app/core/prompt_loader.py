@@ -13,6 +13,16 @@ def load_system_message(path: str | Path, encoding: str = "utf-8") -> str:
     raise ValueError(f"system 메시지를 찾을 수 없습니다: {path}")
 
 
+def load_format_reminder(path: str | Path, encoding: str = "utf-8") -> str | None:
+    """YAML 프롬프트 파일에서 format_reminder 메시지 content를 추출합니다. 없으면 None."""
+    with open(path, encoding=encoding) as f:
+        config = yaml.safe_load(f)
+    for msg in config["messages"]:
+        if msg["_type"] == "format_reminder":
+            return msg["content"]
+    return None
+
+
 def load_chat_prompt(path: str | Path, encoding: str = "utf-8") -> ChatPromptTemplate:
     """messages 배열 형식의 YAML 파일에서 ChatPromptTemplate을 로드합니다."""
     with open(path, encoding=encoding) as f:

@@ -1,7 +1,6 @@
 from functools import lru_cache
-from chains.chains import ChatChain, TopicChain, LLM, Translator
 from chains.rag import RagChain
-from chains.rag_chat import RagChatChain
+from chains.rag_agent import RagAgentChain
 from core.settings import settings
 from retrievers import build_vector_retriever, build_keyword_retriever, build_hybrid_retriever
 from tools import build_rag_tools
@@ -29,21 +28,6 @@ def get_rag_retriever():
 
 
 @lru_cache()
-def get_translate_chain():
-    return Translator().create()
-
-
-@lru_cache()
-def get_llm_chain():
-    return LLM().create()
-
-
-@lru_cache()
-def get_topic_chain():
-    return TopicChain().create()
-
-
-@lru_cache()
 def get_rag_chain():
     return RagChain(retriever=get_rag_retriever()).create()
 
@@ -54,10 +38,5 @@ def get_rag_tools():
 
 
 @lru_cache()
-def get_rag_chat_chain():
-    return RagChatChain(tools=get_rag_tools()).create()
-
-
-@lru_cache()
-def get_chat_chain():
-    return ChatChain().create()
+def get_rag_agent_chain():
+    return RagAgentChain(tools=get_rag_tools()).create()
