@@ -54,6 +54,8 @@ class _ToolCaller:
         results = []
         collected_sources: list[tuple[str, str]] = []
         for tc in tool_calls:
+            query = tc["args"].get("query", tc["args"])
+            logger.info(f"[tool-phase] '{tc['name']}' 호출 — query: '{str(query)[:80]}'")
             result = await self._tools_map[tc["name"]].ainvoke(tc["args"])
             if result in seen:
                 logger.info(f"[tool-phase] '{tc['name']}' 중복 결과 무시")
@@ -68,35 +70,55 @@ class _ToolCaller:
         return results, collected_sources
 
     async def run(self, messages: list) -> tuple[str, list[tuple[str, str]]]:
+        logger.info("[run] LLM 첫 번째 호출 시작")
         response = await self._llm.ainvoke(messages)
-        logger.info(f"[tool-phase] tool_calls={len(response.tool_calls)}")
+        logger.info(f"[run] tool_calls={len(response.tool_calls)}")
 
         # tool 호출 없이 바로 답변한 경우 — 출처 없음
         if not response.tool_calls:
-            return _strip_eos(response.content), []
+            answer = _strip_eos(response.content)
+            logger.info(f"[run] tool 없이 직접 응답 (길이: {len(answer)})")
+            return answer, []
 
         messages.append(response)
         tool_results, collected_sources = await self._execute_tools(response.tool_calls)
         for tc_id, result in tool_results:
             messages.append(ToolMessage(content=result, tool_call_id=tc_id))
-        # format_reminder를 HumanMessage로 주입해 출력 형식을 재강조한다.
-        # 소형 모델은 tool 결과 처리 후 system prompt 지시를 무시하는 경향이 있다.
         if self._format_reminder:
             messages.append(HumanMessage(content=self._format_reminder))
 
+        logger.info("[run] 최종 응답 생성 시작")
         final = await self._llm.ainvoke(messages)
-        logger.info(f"[tool-phase] 최종 응답 raw={repr(final.content[:120])}")
-        # 모델이 임의로 작성한 출처 섹션을 제거한다. 출처는 스키마 sources 필드로 반환된다.
+        logger.info(f"[run] 최종 응답 raw={repr(final.content[:120])}")
         answer = strip_sources_section(_strip_eos(final.content))
+        logger.info(f"[run] 완료 (길이: {len(answer)}, 출처: {len(collected_sources)}개)")
         return answer, collected_sources
 
     async def stream(self, messages: list):
         # str 청크: 답변 텍스트 / list 청크: 출처 목록 (라우터에서 타입 구분)
-        response = await self._llm.ainvoke(messages)
+        # astream으로 청크를 수집하면서 tool_calls 여부를 판단한다.
+        logger.info("[stream] LLM 첫 번째 호출 시작")
+        chunks = []
+        async for chunk in self._llm.astream(messages):
+            chunks.append(chunk)
 
-        # tool 호출 없이 바로 답변한 경우 — 출처 이벤트 없음
+        response = chunks[0]
+        for c in chunks[1:]:
+            response = response + c
+
+        logger.info(f"[stream] tool_calls={len(response.tool_calls)}")
+
+        # tool 호출 없이 바로 답변한 경우 — 수집된 청크를 순서대로 yield
         if not response.tool_calls:
-            yield _strip_eos(response.content)
+            logger.info("[stream] tool 없이 직접 스트리밍 시작")
+            total = 0
+            for chunk in chunks:
+                if chunk.content:
+                    cleaned = _strip_eos(chunk.content)
+                    if cleaned:
+                        total += len(cleaned)
+                        yield cleaned
+            logger.info(f"[stream] 완료 (누적 길이: {total})")
             return
 
         messages.append(response)
@@ -106,12 +128,16 @@ class _ToolCaller:
         if self._format_reminder:
             messages.append(HumanMessage(content=self._format_reminder))
 
+        logger.info("[stream] 최종 응답 스트리밍 시작")
+        total = 0
         async for chunk in self._llm.astream(messages):
             if chunk.content:
                 cleaned = _strip_eos(chunk.content)
                 if cleaned:
+                    total += len(cleaned)
                     yield cleaned
 
+        logger.info(f"[stream] 완료 (누적 길이: {total}, 출처: {len(collected_sources)}개)")
         # 스트리밍 종료 후 출처 목록을 마지막 이벤트로 전달한다.
         # 라우터에서 isinstance(chunk, list)로 구분해 JSON SSE 이벤트로 직렬화한다.
         if collected_sources:
