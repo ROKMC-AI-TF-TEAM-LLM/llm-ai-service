@@ -18,6 +18,9 @@ _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "rag-agent.yaml"
 def _strip_eos(text: str) -> str:
     return re.sub(r"</?eos>", "", text).strip()
 
+def _clean_chunk(text: str) -> str:
+    return re.sub(r"</?eos>", "", text)
+
 
 def _parse_sources_from_result(xml_str: str) -> list[tuple[str, str]]:
     # search_documents 반환값(format_docs XML)에서 파일명·페이지를 추출한다.
@@ -115,7 +118,7 @@ class _ToolCaller:
             total = 0
             for chunk in chunks:
                 if chunk.content:
-                    cleaned = _strip_eos(chunk.content)
+                    cleaned = _clean_chunk(chunk.content)
                     if cleaned:
                         total += len(cleaned)
                         yield cleaned
@@ -134,9 +137,9 @@ class _ToolCaller:
         chunk_count = 0
         async for chunk in self._llm_plain.astream(messages):
             chunk_count += 1
-            # logger.debug(f"[stream] chunk #{chunk_count} content_len={len(chunk.content) if chunk.content else 0}")
+            logger.debug(f"[stream] chunk #{chunk_count} content_len={len(chunk.content) if chunk.content else 0}")
             if chunk.content:
-                cleaned = _strip_eos(chunk.content)
+                cleaned = _clean_chunk(chunk.content)
                 if cleaned:
                     total += len(cleaned)
                     yield cleaned

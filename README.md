@@ -71,7 +71,7 @@ langserve_ollama/
 │   └── vectorstore/             # FAISS 인덱스 + BM25 문서 캐시
 ├── ollama-modelfile/            # 모델별 Ollama Modelfile
 └── app/
-    ├── fastapi_server.py        # FastAPI 서버 진입점
+    ├── main.py                  # FastAPI 서버 진입점
     ├── ingest.py                # PDF → 벡터스토어 인덱싱
     ├── api/
     │   ├── router.py            # 전체 라우터 등록
@@ -158,7 +158,7 @@ FAISS 인덱스와 BM25 문서 캐시가 `data/vectorstore/`에 저장됩니다.
 
 ```bash
 cd app
-python fastapi_server.py
+python main.py
 ```
 
 서버가 실행되면 [http://localhost:8001/docs](http://localhost:8001/docs) 에서 Swagger UI를 확인할 수 있습니다.
