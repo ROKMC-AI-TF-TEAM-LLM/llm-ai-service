@@ -42,8 +42,9 @@ class _MessageBuilder:
 
 
 class _ToolCaller:
-    def __init__(self, llm_with_tools, tools_map: dict, format_reminder: str | None = None):
-        self._llm = llm_with_tools
+    def __init__(self, llm_with_tools, llm_plain, tools_map: dict, format_reminder: str | None = None):
+        self._llm = llm_with_tools   # tool 호출 감지용
+        self._llm_plain = llm_plain  # 최종 응답 생성용 (bind_tools 없음 → 스트리밍 정상 동작)
         self._tools_map = tools_map
         self._format_reminder = format_reminder
 
@@ -88,7 +89,7 @@ class _ToolCaller:
             messages.append(HumanMessage(content=self._format_reminder))
 
         logger.info("[run] 최종 응답 생성 시작")
-        final = await self._llm.ainvoke(messages)
+        final = await self._llm_plain.ainvoke(messages)
         logger.info(f"[run] 최종 응답 raw={repr(final.content[:120])}")
         answer = strip_sources_section(_strip_eos(final.content))
         logger.info(f"[run] 완료 (길이: {len(answer)}, 출처: {len(collected_sources)}개)")
@@ -130,7 +131,10 @@ class _ToolCaller:
 
         logger.info("[stream] 최종 응답 스트리밍 시작")
         total = 0
-        async for chunk in self._llm.astream(messages):
+        chunk_count = 0
+        async for chunk in self._llm_plain.astream(messages):
+            chunk_count += 1
+            # logger.debug(f"[stream] chunk #{chunk_count} content_len={len(chunk.content) if chunk.content else 0}")
             if chunk.content:
                 cleaned = _strip_eos(chunk.content)
                 if cleaned:
@@ -180,6 +184,7 @@ class RagAgentChain(BaseChain):
         return _AgentLoop(
             tool_caller=_ToolCaller(
                 llm_with_tools=llm.bind_tools(self.tools),
+                llm_plain=llm,
                 tools_map={t.name: t for t in self.tools},
                 format_reminder=load_format_reminder(_PROMPT_PATH),
             ),
