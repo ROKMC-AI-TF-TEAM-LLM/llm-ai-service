@@ -100,33 +100,26 @@ class _ToolCaller:
 
     async def stream(self, messages: list):
         # str 청크: 답변 텍스트 / list 청크: 출처 목록 (라우터에서 타입 구분)
-        # astream으로 청크를 수집하면서 tool_calls 여부를 판단한다.
+        # 청크를 받는 즉시 yield하면서 동시에 누적해 tool_calls 여부를 판단한다.
         logger.info("[stream] LLM 첫 번째 호출 시작")
-        chunks = []
+        accumulated = None
+        total = 0
         async for chunk in self._llm.astream(messages):
-            chunks.append(chunk)
+            logger.info(f"[stream] Chunk : {chunk}")
+            accumulated = chunk if accumulated is None else accumulated + chunk
+            if chunk.content:
+                cleaned = _clean_chunk(chunk.content)
+                if cleaned:
+                    total += len(cleaned)
+                    yield cleaned
 
-        response = chunks[0]
-        for c in chunks[1:]:
-            response = response + c
-
-        logger.info(f"[stream] tool_calls={len(response.tool_calls)}")
-
-        # tool 호출 없이 바로 답변한 경우 — 수집된 청크를 순서대로 yield
-        if not response.tool_calls:
-            logger.info("[stream] tool 없이 직접 스트리밍 시작")
-            total = 0
-            for chunk in chunks:
-                if chunk.content:
-                    cleaned = _clean_chunk(chunk.content)
-                    if cleaned:
-                        total += len(cleaned)
-                        yield cleaned
-            logger.info(f"[stream] 완료 (누적 길이: {total})")
+        if not accumulated or not accumulated.tool_calls:
+            logger.info(f"[stream] tool 없이 직접 스트리밍 완료 (누적 길이: {total})")
             return
 
-        messages.append(response)
-        tool_results, collected_sources = await self._execute_tools(response.tool_calls)
+        logger.info(f"[stream] tool_calls={len(accumulated.tool_calls)}")
+        messages.append(accumulated)
+        tool_results, collected_sources = await self._execute_tools(accumulated.tool_calls)
         for tc_id, result in tool_results:
             messages.append(ToolMessage(content=result, tool_call_id=tc_id))
         if self._format_reminder:
