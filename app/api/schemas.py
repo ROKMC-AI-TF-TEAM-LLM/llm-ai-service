@@ -32,5 +32,5 @@ class SourceItem(BaseModel):
 
 
 class RagAgentOutput(BaseModel):
-    output: str = Field(..., description="LLM 답변")
+    content: str = Field(..., description="LLM 답변")
     sources: List[SourceItem] = Field(default=[], description="검색된 문서 출처 목록")

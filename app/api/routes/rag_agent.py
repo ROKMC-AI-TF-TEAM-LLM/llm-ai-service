@@ -41,17 +41,38 @@ async def rag_agent(body: RagAgentInput, chain=Depends(get_rag_agent_chain)):
             "chat_history": _to_lc_messages(body.messages),
         })
         logger.info(f"[agent] 응답 완료 (길이: {len(answer)}, 출처: {len(sources)}개)")
-        return RagAgentOutput(output=answer, sources=_to_source_items(sources))
+        return RagAgentOutput(content=answer, sources=_to_source_items(sources))
     except Exception as e:
         logger.error(f"[agent] 오류: {e}")
         raise InternalServerError(detail=str(e))
 
 
+_STREAM_DESCRIPTION = """
+답변을 SSE(Server-Sent Events) 스트림으로 전달합니다.
+
+**이벤트 포맷** (`data: <JSON>\\n\\n`)
+
+| type | 설명 | 페이로드 예시 |
+|------|------|--------------|
+| `text` | 답변 텍스트 청크 | `{"type":"text","content":"안녕하세요"}` |
+| `sources` | 검색된 문서 출처 (스트림 마지막에 1회) | `{"type":"sources","items":[{"name":"doc.pdf","page":"3"}]}` |
+| `error` | 오류 발생 | `{"type":"error","message":"오류 내용"}` |
+
+스트림 종료 신호: `data: [DONE]`
+"""
+
+
 @router.post(
     "/stream",
     summary="RAG 에이전트 질의응답 (스트리밍)",
-    description="답변은 SSE 텍스트 청크로, 출처는 스트림 마지막에 JSON 이벤트로 전달됩니다.",
+    description=_STREAM_DESCRIPTION,
     response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"text/event-stream": {}},
+            "description": "SSE 스트림",
+        }
+    },
 )
 async def rag_agent_stream(body: RagAgentInput, chain=Depends(get_rag_agent_chain)):
     logger.info(f"[agent/stream] 요청: '{body.question[:80]}' (이전 메시지: {len(body.messages)}개)")
@@ -70,11 +91,11 @@ async def rag_agent_stream(body: RagAgentInput, chain=Depends(get_rag_agent_chai
                 elif chunk:
                     total += len(chunk)
                     logger.info(f"[agent/stream] 스트림 : {chunk}")
-                    yield f"data: {chunk}\n\n"
+                    yield f"data: {json.dumps({'type': 'text', 'content': chunk}, ensure_ascii=False)}\n\n"
             logger.info(f"[agent/stream] 스트림 완료 (누적 길이: {total})")
             yield "data: [DONE]\n\n"
         except Exception as e:
             logger.error(f"[agent/stream] 오류: {e}")
-            yield f"data: [ERROR] {e}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(generator(), media_type="text/event-stream")
