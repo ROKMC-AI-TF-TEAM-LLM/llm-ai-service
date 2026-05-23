@@ -3,6 +3,7 @@ llm:
   temperature: 0.0
 
 retriever:
+  vectorstore_path: data/vectorstore  # 프로젝트 루트 기준 상대경로 또는 절대경로
   embedding_model: bge-m3
   vector_weight: 0.6
   keyword_weight: 0.4
@@ -10,7 +11,7 @@ retriever:
 
 web:
   allowed_domains: null
-  # allowed_domains: 
+  # allowed_domains:
     # - https://namu.wiki/w/%EB%8F%84%EB%A6%BC%EA%B3%A0%EB%93%B1%ED%95%99%EA%B5%90
   # 내부망 환경에서는 아래와 같이 설정
   # allowed_domains:
@@ -22,3 +23,6 @@ database:
   echo: false
   # PostgreSQL 예시
   # url: postgresql+asyncpg://user:password@localhost:5432/dbname
+
+logging:
+  level: INFO  # DEBUG 로 변경하면 상세 로그 출력

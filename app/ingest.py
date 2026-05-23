@@ -7,14 +7,12 @@ from langchain_ollama import OllamaEmbeddings
 
 from core.logger import get_logger
 from core.exceptions import IngestionError
+from core.settings import settings
 
-# PDF 원본 파일 디렉토리 및 인덱스 저장 경로
 DATA_DIR = Path(__file__).parent.parent / "data" / "raw"
-VECTORSTORE_PATH = Path(__file__).parent.parent / "data" / "vectorstore"
-
-# BM25 키워드 검색을 위해 청킹된 문서도 함께 저장
+VECTORSTORE_PATH = settings.retriever.vectorstore_path
 DOCS_PATH = VECTORSTORE_PATH / "docs.pkl"
-EMBEDDING_MODEL = "bge-m3"
+EMBEDDING_MODEL = settings.retriever.embedding_model
 
 logger = get_logger(__name__)
 

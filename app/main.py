@@ -7,6 +7,8 @@ import uvicorn
 from api.router import api_router
 from api.dependencies import get_rag_chain, get_rag_agent_chain
 from core.exceptions import AppHTTPException
+from core.logger import configure_logging
+from core.settings import settings
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -14,6 +16,7 @@ load_dotenv()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging(settings.logging.level)
     get_rag_chain()
     get_rag_agent_chain()
     yield
