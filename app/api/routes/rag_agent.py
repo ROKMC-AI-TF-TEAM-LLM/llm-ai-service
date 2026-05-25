@@ -90,10 +90,9 @@ async def rag_agent_stream(body: RagAgentInput, chain=Depends(get_rag_agent_chai
                     yield f"data: {json.dumps({'type': 'sources', 'items': items}, ensure_ascii=False)}\n\n"
                 elif chunk:
                     total += len(chunk)
-                    logger.info(f"[agent/stream] 스트림 : {chunk}")
                     yield f"data: {json.dumps({'type': 'text', 'content': chunk}, ensure_ascii=False)}\n\n"
             logger.info(f"[agent/stream] 스트림 완료 (누적 길이: {total})")
-            yield "data: [DONE]\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
         except Exception as e:
             logger.error(f"[agent/stream] 오류: {e}")
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"

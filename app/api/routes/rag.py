@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 
@@ -27,10 +28,22 @@ async def rag_query(body: RagInput, chain=Depends(get_rag_chain)):
         raise InternalServerError(detail=str(e))
 
 
+_STREAM_DESCRIPTION = """
+RAG 응답을 SSE(Server-Sent Events) 스트림으로 반환합니다.
+
+**이벤트 포맷** (`data: <JSON>\\n\\n`)
+
+| type | 설명 | 페이로드 예시 |
+|------|------|--------------|
+| `text` | 답변 텍스트 청크 | `{"type":"text","content":"안녕하세요"}` |
+| `error` | 오류 발생 | `{"type":"error","message":"오류 내용"}` |
+"""
+
+
 @router.post(
     "/stream",
     summary="RAG 질의응답 (스트리밍)",
-    description="RAG 응답을 SSE 스트림으로 반환합니다.",
+    description=_STREAM_DESCRIPTION,
     response_class=StreamingResponse,
 )
 async def rag_stream(body: RagInput, chain=Depends(get_rag_chain)):
@@ -41,11 +54,11 @@ async def rag_stream(body: RagInput, chain=Depends(get_rag_chain)):
             total = 0
             async for chunk in chain.astream(body.question):
                 total += len(chunk)
-                yield f"data: {chunk}\n\n"
+                yield f"data: {json.dumps({'type': 'text', 'content': chunk}, ensure_ascii=False)}\n\n"
             logger.info(f"[rag/stream] 스트림 완료 (누적 길이: {total})")
-            yield "data: [DONE]\n\n"
+            yield f"data: {json.dumps({'type': 'done'})}\n\n"
         except Exception as e:
             logger.error(f"[rag/stream] 오류: {e}")
-            yield f"data: [ERROR] {e}\n\n"
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(generator(), media_type="text/event-stream")
