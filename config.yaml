@@ -1,6 +1,7 @@
 llm:
   model: gemma4:e4b
   temperature: 0.0
+  prompt_file: rag-chat.yaml   # rag-chat.yaml | rag-exaone.yaml
 
 retriever:
   vectorstore_path: data/vectorstore  # 프로젝트 루트 기준 상대경로 또는 절대경로

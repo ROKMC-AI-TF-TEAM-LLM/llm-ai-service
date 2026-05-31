@@ -13,6 +13,8 @@ _PROJECT_ROOT = Path(__file__).parent.parent.parent
 class LLMSettings(BaseModel):
     model: str = "gemma4:e4b"
     temperature: float = 0.0
+    ollama_host: str = "http://localhost:11434"
+    prompt_file: str = "rag-chat.yaml"
 
 
 class RetrieverSettings(BaseModel):

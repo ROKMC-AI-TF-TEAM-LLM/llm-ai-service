@@ -7,6 +7,7 @@ from chains.base import BaseChain
 from chains.utils import format_docs
 from core.logger import get_logger
 from core.prompt_loader import load_chat_prompt
+from core.settings import settings
 
 logger = get_logger(__name__)
 
@@ -18,10 +19,11 @@ class RagChain(BaseChain):
         self.retriever = retriever
 
     def setup(self):
-        logger.info(f"RAG 체인 구성 중 (모델: {self.model}, temperature: {self.temperature})")
+        prompt_file = settings.llm.prompt_file
+        logger.info(f"RAG 체인 구성 중 (모델: {self.model}, 프롬프트: {prompt_file}, temperature: {self.temperature})")
 
         base_dir = Path(__file__).parent.parent
-        prompt = load_chat_prompt(base_dir / "prompts/rag-exaone.yaml")
+        prompt = load_chat_prompt(base_dir / "prompts" / prompt_file)
         llm = ChatOllama(model=self.model, temperature=self.temperature)
 
         chain = (
