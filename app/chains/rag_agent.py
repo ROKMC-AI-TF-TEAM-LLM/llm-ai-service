@@ -18,6 +18,7 @@ _PROMPT_PATH = Path(__file__).parent.parent / "prompts" / "rag-agent.yaml"
 def _strip_eos(text: str) -> str:
     return re.sub(r"</?eos>", "", text).strip()
 
+
 def _clean_chunk(text: str) -> str:
     return re.sub(r"</?eos>", "", text)
 
@@ -51,45 +52,59 @@ class _ToolCaller:
         self._tools_map = tools_map
         self._format_reminder = format_reminder
 
+    async def _run_single_tool(self, tc: dict) -> str:
+        query = tc["args"].get("query", tc["args"])
+        logger.info(f"[tool-phase] '{tc['name']}' 호출 — query: '{str(query)[:80]}'")
+        result = await self._tools_map[tc["name"]].ainvoke(tc["args"])
+        logger.info(f"[tool-phase] '{tc['name']}' 결과 길이: {len(result)}")
+        return result
+
     async def _execute_tools(self, tool_calls: list) -> tuple[list[tuple[str, str]], list[tuple[str, str]]]:
-        # 반환값: (ToolMessage용 결과 목록, 출처 후처리용 소스 목록)
-        # ainvoke로 호출해 이벤트 루프 블로킹을 방지한다.
+        # 모든 tool을 병렬 실행한 뒤 중복 결과를 제거한다.
+        raw_results = await asyncio.gather(*[self._run_single_tool(tc) for tc in tool_calls])
+
         seen: set[str] = set()
-        results = []
+        tool_results: list[tuple[str, str]] = []
         collected_sources: list[tuple[str, str]] = []
-        for tc in tool_calls:
-            query = tc["args"].get("query", tc["args"])
-            logger.info(f"[tool-phase] '{tc['name']}' 호출 — query: '{str(query)[:80]}'")
-            result = await self._tools_map[tc["name"]].ainvoke(tc["args"])
+
+        for tc, result in zip(tool_calls, raw_results):
             if result in seen:
                 logger.info(f"[tool-phase] '{tc['name']}' 중복 결과 무시")
                 continue
             seen.add(result)
-            results.append((tc["id"], result))
-            logger.info(f"[tool-phase] '{tc['name']}' 결과 길이: {len(result)}")
+            tool_results.append((tc["id"], result))
             # search_documents 결과에서만 출처를 파싱한다.
             # 웹 tool(fetch_page 등)은 URL을 직접 답변에 쓰도록 모델에 위임한다.
             if tc["name"] == "search_documents":
                 collected_sources.extend(_parse_sources_from_result(result))
-        return results, collected_sources
 
-    async def run(self, messages: list) -> tuple[str, list[tuple[str, str]]]:
-        logger.info("[run] LLM 첫 번째 호출 시작")
-        response = await self._llm.ainvoke(messages)
-        logger.info(f"[run] tool_calls={len(response.tool_calls)}")
+        return tool_results, collected_sources
 
-        # tool 호출 없이 바로 답변한 경우 — 출처 없음
-        if not response.tool_calls:
-            answer = _strip_eos(response.content)
-            logger.info(f"[run] tool 없이 직접 응답 (길이: {len(answer)})")
-            return answer, []
+    async def _apply_tool_results(self, response, messages: list) -> list[tuple[str, str]]:
+        """tool 실행 → ToolMessage 추가 → format_reminder 추가까지 공통 흐름.
 
+        run()과 stream()의 중복을 제거하기 위해 분리했다.
+        messages는 in-place 변경된다.
+        """
         messages.append(response)
         tool_results, collected_sources = await self._execute_tools(response.tool_calls)
         for tc_id, result in tool_results:
             messages.append(ToolMessage(content=result, tool_call_id=tc_id))
         if self._format_reminder:
             messages.append(HumanMessage(content=self._format_reminder))
+        return collected_sources
+
+    async def run(self, messages: list) -> tuple[str, list[tuple[str, str]]]:
+        logger.info("[run] LLM 첫 번째 호출 시작")
+        response = await self._llm.ainvoke(messages)
+        logger.info(f"[run] tool_calls={len(response.tool_calls)}")
+
+        if not response.tool_calls:
+            answer = _strip_eos(response.content)
+            logger.info(f"[run] tool 없이 직접 응답 (길이: {len(answer)})")
+            return answer, []
+
+        collected_sources = await self._apply_tool_results(response, messages)
 
         logger.info("[run] 최종 응답 생성 시작")
         final = await self._llm_plain.ainvoke(messages)
@@ -118,12 +133,7 @@ class _ToolCaller:
             return
 
         logger.info(f"[stream] tool_calls={len(accumulated.tool_calls)}")
-        messages.append(accumulated)
-        tool_results, collected_sources = await self._execute_tools(accumulated.tool_calls)
-        for tc_id, result in tool_results:
-            messages.append(ToolMessage(content=result, tool_call_id=tc_id))
-        if self._format_reminder:
-            messages.append(HumanMessage(content=self._format_reminder))
+        collected_sources = await self._apply_tool_results(accumulated, messages)
 
         logger.info("[stream] 최종 응답 스트리밍 시작")
         total = 0
