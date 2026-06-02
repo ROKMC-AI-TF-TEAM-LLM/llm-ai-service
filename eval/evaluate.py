@@ -153,12 +153,21 @@ def evaluate(ground_truth_path: str):
     retriever = get_rag_retriever()
     print(f"평가 시작: {len(items)}개 질문\n")
 
+    embed_errors = []
     rows = []
     for item in items:
         question = item["question"]
         relevant_list = item["relevant"]
 
-        retrieved = retriever.invoke(question)
+        try:
+            retrieved = retriever.invoke(question)
+        except Exception as e:
+            # bge-m3 가 특정 입력(특수문자 등)에 NaN 임베딩을 반환하는 경우 스킵
+            print(f"Q: {question[:60]}")
+            print(f"   [스킵] 임베딩 오류 — {e}")
+            print(f"   힌트: Ollama 재시작 후 재시도하거나 해당 질문의 특수문자를 확인하세요.\n")
+            embed_errors.append(question)
+            continue
 
         p = precision_at_k(retrieved, relevant_list, top_k)
         r = recall_at_k(retrieved, relevant_list, top_k)
@@ -184,6 +193,13 @@ def evaluate(ground_truth_path: str):
             print(f"   [{rank}] {rel_mark} page={page}  {src[:50]}")
         print()
 
+    if embed_errors:
+        print(f"[경고] 임베딩 오류로 스킵된 질문 {len(embed_errors)}개 (평균 계산에서 제외)\n")
+
+    if not rows:
+        print("[오류] 성공적으로 평가된 질문이 없습니다.")
+        sys.exit(1)
+
     # 평균 계산
     metric_keys = [f"Precision@{top_k}", f"Recall@{top_k}", "MRR", f"NDCG@{top_k}"]
     avg = {k: sum(r[k] for r in rows) / len(rows) for k in metric_keys}
@@ -208,7 +224,11 @@ def evaluate(ground_truth_path: str):
         print(f"  {key:<18}  {val:>8.3f}  {thr:>10.1f}  {verdict:>6}")
 
     print(sep)
-    print(f"  평가 질문 수: {len(rows)}개   top_k: {top_k}")
+    skipped_msg = f"   스킵(임베딩 오류): {len(embed_errors)}개" if embed_errors else ""
+    print(f"  평가 질문 수: {len(rows)}개   top_k: {top_k}{skipped_msg}")
+    if embed_errors:
+        for q in embed_errors:
+            print(f"    - {q}")
     print(sep)
 
     return avg
