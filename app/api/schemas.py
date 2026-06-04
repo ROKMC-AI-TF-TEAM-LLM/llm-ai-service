@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Literal
 from pydantic import BaseModel, Field
 
@@ -34,3 +35,19 @@ class SourceItem(BaseModel):
 class RagAgentOutput(BaseModel):
     content: str = Field(..., description="LLM 답변")
     sources: List[SourceItem] = Field(default=[], description="검색된 문서 출처 목록")
+
+
+# Documents
+
+class DocumentItem(BaseModel):
+    name: str = Field(..., description="문서 파일명")
+    type: str = Field(..., description="문서 형태 (예: PDF)")
+    applied_at: datetime = Field(..., description="적용 일시")
+
+
+class DocumentListOutput(BaseModel):
+    documents: List[DocumentItem] = Field(..., description="현재 페이지 문서 목록")
+    total: int = Field(..., description="총 문서 수")
+    offset: int = Field(..., description="현재 오프셋")
+    limit: int = Field(..., description="페이지 크기")
+    has_more: bool = Field(..., description="다음 페이지 존재 여부")
