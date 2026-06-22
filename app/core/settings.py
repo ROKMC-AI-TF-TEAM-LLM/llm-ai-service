@@ -23,6 +23,12 @@ class RetrieverSettings(BaseModel):
     vector_weight: float = 0.6
     keyword_weight: float = 0.4
     top_k: int = 4
+    parent_chunk_size: int = 1500
+    parent_chunk_overlap: int = 200
+    child_chunk_size: int = 300
+    child_chunk_overlap: int = 50
+    candidate_k: int = 15
+    final_k: int = 5
 
     @model_validator(mode="after")
     def resolve_vectorstore_path(self) -> "RetrieverSettings":
