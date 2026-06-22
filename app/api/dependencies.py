@@ -57,6 +57,7 @@ def get_rag_retriever():
         parent_docs=parent_docs,
         final_k=r.final_k,
         reranker=reranker,
+        rerank_threshold=r.rerank_threshold,
     )
 
 
