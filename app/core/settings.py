@@ -29,6 +29,9 @@ class RetrieverSettings(BaseModel):
     child_chunk_overlap: int = 50
     candidate_k: int = 15
     final_k: int = 5
+    use_reranker: bool = True
+    reranker_model: str = "BAAI/bge-reranker-v2-m3"
+    reranker_device: str = "auto"
 
     @model_validator(mode="after")
     def resolve_vectorstore_path(self) -> "RetrieverSettings":

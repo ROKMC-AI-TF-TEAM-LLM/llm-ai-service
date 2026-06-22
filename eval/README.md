@@ -21,11 +21,16 @@ eval/
 | 지표 | 수식 | 목표값 | 낮을 때 원인 |
 |------|------|--------|------------|
 | **Precision@k** | (상위 k 중 관련 수) / k | 0.5+ | 노이즈 청크 과다 |
-| **Recall@k** | (상위 k 중 관련 수) / (정답 총 수) | 0.8+ | 필요한 청크 누락 |
+| **Recall@k** | (상위 k 중 커버한 고유 관련 페이지 수) / (정답 총 수) | 0.8+ | 필요한 청크 누락 |
 | **MRR** | 1 / rank (첫 번째 관련 청크 순위) | 0.5+ | 관련 청크가 하위에 묻힘 |
 | **NDCG@k** | DCG@k / IDCG@k | 0.8+ | 순위 정렬 부정확 |
 
 목표값 기준: Precision·Recall·NDCG → BEIR / MTEB 표준, MRR → MS MARCO 표준
+
+> **parent-child 청킹 보정**: 한 페이지가 여러 부모 청크로 나뉘면 동일 `(source, page)`
+> 청크가 중복 검색될 수 있다. **Recall·NDCG 는 고유 `(source, page)` 단위로 집계**하여
+> 같은 페이지의 중복 청크를 한 번만 카운트한다 (Recall·NDCG > 1.0 방지).
+> Precision 은 표준 정의대로 반환 청크 단위로 집계한다.
 
 ### 수식 상세
 
@@ -33,13 +38,15 @@ eval/
 Precision@k = (상위 k개 중 관련 청크 수) / k
               ※ 분모는 k 고정 (실제 반환 수가 아님)
 
-Recall@k    = (상위 k개 중 관련 청크 수) / (ground_truth 전체 관련 청크 수)
+Recall@k    = (상위 k개 중 커버한 고유 관련 페이지 수) / (ground_truth 전체 관련 페이지 수)
               ※ 분모는 corpus 크기가 아닌 ground_truth 의 pages 총 수
+              ※ 분자는 고유 (source, page) 집합 — 같은 페이지 중복 청크는 1회만 집계
 
 MRR         = 1 / rank_first_relevant
               ※ 첫 번째 관련 청크만 봄, 이후는 무시
 
 DCG@k       = Σ(i=1~k)        rel(i) / log₂(i+1)
+              ※ rel(i)=1 은 해당 페이지를 처음 만났을 때만 (중복 페이지는 0)
 IDCG@k      = Σ(i=1~min(R,k)) 1      / log₂(i+1)   R = 정답 수
 NDCG@k      = DCG@k / IDCG@k
 ```

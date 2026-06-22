@@ -52,8 +52,18 @@ def _is_relevant(doc, relevant_list: list[dict]) -> bool:
 
 
 def _total_relevant(relevant_list: list[dict]) -> int:
-    """ground truth 에 명시된 전체 관련 청크 수 (Recall 분모)."""
+    """ground truth 에 명시된 전체 관련 페이지 수 (Recall 분모)."""
     return sum(len(e["pages"]) for e in relevant_list)
+
+
+def _doc_key(doc) -> tuple:
+    """페이지 중복 식별용 키 (파일명, page).
+
+    parent-child 청킹에서는 한 페이지가 여러 부모 청크로 나뉘므로
+    동일 (source, page) 를 가진 청크가 중복 검색될 수 있다.
+    Recall·NDCG 계산 시 같은 페이지를 한 번만 집계하기 위해 사용한다.
+    """
+    return (Path(doc.metadata.get("source", "")).name, doc.metadata.get("page", -1))
 
 
 # ── 메트릭 수식 ──────────────────────────────────────────────────────────────
@@ -70,15 +80,21 @@ def precision_at_k(retrieved: list, relevant_list: list[dict], k: int) -> float:
 
 def recall_at_k(retrieved: list, relevant_list: list[dict], k: int) -> float:
     """
-    Recall@k = (상위 k 중 관련 수) / (ground truth 전체 관련 청크 수)
+    Recall@k = (상위 k 중 커버한 고유 관련 페이지 수) / (ground truth 전체 관련 페이지 수)
 
-    분모는 corpus 크기가 아닌 ground truth 에 표시된 관련 청크 수.
+    분모는 corpus 크기가 아닌 ground truth 에 표시된 관련 페이지 수.
+    분자는 고유 (source, page) 집합으로 집계 — 같은 페이지를 가리키는
+    부모 청크가 여러 개 검색돼도 한 번만 카운트한다 (Recall > 1.0 방지).
     """
     total = _total_relevant(relevant_list)
     if total == 0:
         return 0.0
-    hits = sum(1 for doc in retrieved[:k] if _is_relevant(doc, relevant_list))
-    return hits / total
+    found = {
+        _doc_key(doc)
+        for doc in retrieved[:k]
+        if _is_relevant(doc, relevant_list)
+    }
+    return len(found) / total
 
 
 def mrr(retrieved: list, relevant_list: list[dict]) -> float:
@@ -103,12 +119,21 @@ def ndcg_at_k(retrieved: list, relevant_list: list[dict], k: int) -> float:
     NDCG@k = DCG@k / IDCG@k
 
     참고: BEIR / MTEB 표준, log2(i+1) 할인 인자, i 는 1-indexed.
+    같은 (source, page) 를 가리키는 부모 청크가 여러 번 등장하면
+    최초 1회만 관련으로 집계한다 (중복 페이지 과대 집계 → NDCG > 1.0 방지).
     """
     def dcg(docs: list) -> float:
-        return sum(
-            (1.0 if _is_relevant(doc, relevant_list) else 0.0) / math.log2(i + 2)
-            for i, doc in enumerate(docs[:k])
-        )
+        seen: set = set()
+        total = 0.0
+        for i, doc in enumerate(docs[:k]):
+            if not _is_relevant(doc, relevant_list):
+                continue
+            key = _doc_key(doc)
+            if key in seen:
+                continue  # 이미 집계한 페이지의 중복 청크는 추가 점수 없음
+            seen.add(key)
+            total += 1.0 / math.log2(i + 2)
+        return total
 
     actual_dcg = dcg(retrieved)
 
