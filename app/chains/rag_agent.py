@@ -1,7 +1,7 @@
 import asyncio
 import re
 from pathlib import Path
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.runnables import Runnable
 from langchain_ollama import ChatOllama
 
@@ -80,21 +80,24 @@ class _ToolCaller:
 
         return tool_results, collected_sources
 
-    async def _apply_tool_results(self, response, messages: list) -> list[tuple[str, str]]:
-        """tool 실행 → ToolMessage 추가 → format_reminder 추가까지 공통 흐름.
+    async def _build_final_messages(self, response, base_messages: list, question: str) -> tuple[list, list[tuple[str, str]]]:
+        """tool 실행 후 최종 답변 생성용 메시지를 구성한다.
 
-        run()과 stream()의 중복을 제거하기 위해 분리했다.
-        messages는 in-place 변경된다.
+        AIMessage(tool_calls) + ToolMessage 를 도구 미바인딩 LLM(llm_plain)에 그대로
+        재생하면 일부 모델(gemma)이 빈 응답/지연을 내므로, 검색 결과를 평문 컨텍스트로
+        주입한 단일 Human 메시지로 재구성한다 (simple RAG와 동일한 안정 패턴).
+
+        base_messages = [System, *chat_history, Human(question)]
+        반환 = ([System, *chat_history, Human(컨텍스트+질문+reminder)], 출처)
         """
-        messages.append(response)
         tool_results, collected_sources = await self._execute_tools(response.tool_calls)
-        for tc_id, result in tool_results:
-            messages.append(ToolMessage(content=result, tool_call_id=tc_id))
-        if self._format_reminder:
-            messages.append(HumanMessage(content=self._format_reminder))
-        return collected_sources
+        context = "\n\n".join(result for _, result in tool_results)
+        reminder = self._format_reminder or ""
+        human = f"## 참고 문서\n{context}\n\n## 질문\n{question}\n\n{reminder}"
+        final_messages = base_messages[:-1] + [HumanMessage(content=human)]
+        return final_messages, collected_sources
 
-    async def run(self, messages: list) -> tuple[str, list[tuple[str, str]]]:
+    async def run(self, messages: list, question: str) -> tuple[str, list[tuple[str, str]]]:
         logger.info("[run] LLM 첫 번째 호출 시작")
         response = await self._llm.ainvoke(messages)
         logger.info(f"[run] tool_calls={len(response.tool_calls)}")
@@ -104,16 +107,16 @@ class _ToolCaller:
             logger.info(f"[run] tool 없이 직접 응답 (길이: {len(answer)})")
             return answer, []
 
-        collected_sources = await self._apply_tool_results(response, messages)
+        final_messages, collected_sources = await self._build_final_messages(response, messages, question)
 
         logger.info("[run] 최종 응답 생성 시작")
-        final = await self._llm_plain.ainvoke(messages)
+        final = await self._llm_plain.ainvoke(final_messages)
         logger.info(f"[run] 최종 응답 raw={repr(final.content[:120])}")
         answer = strip_sources_section(_strip_eos(final.content))
         logger.info(f"[run] 완료 (길이: {len(answer)}, 출처: {len(collected_sources)}개)")
         return answer, collected_sources
 
-    async def stream(self, messages: list):
+    async def stream(self, messages: list, question: str):
         # str 청크: 답변 텍스트 / list 청크: 출처 목록 (라우터에서 타입 구분)
         # 청크를 받는 즉시 yield하면서 동시에 누적해 tool_calls 여부를 판단한다.
         logger.info("[stream] LLM 첫 번째 호출 시작")
@@ -133,12 +136,12 @@ class _ToolCaller:
             return
 
         logger.info(f"[stream] tool_calls={len(accumulated.tool_calls)}")
-        collected_sources = await self._apply_tool_results(accumulated, messages)
+        final_messages, collected_sources = await self._build_final_messages(accumulated, messages, question)
 
         logger.info("[stream] 최종 응답 스트리밍 시작")
         total = 0
         chunk_count = 0
-        async for chunk in self._llm_plain.astream(messages):
+        async for chunk in self._llm_plain.astream(final_messages):
             chunk_count += 1
             logger.debug(f"[stream] chunk #{chunk_count} content_len={len(chunk.content) if chunk.content else 0}")
             if chunk.content:
@@ -164,11 +167,11 @@ class _AgentLoop(Runnable):
 
     async def ainvoke(self, input, _config=None, **_kwargs) -> tuple[str, list[tuple[str, str]]]:
         messages = self._message_builder.build_initial(input)
-        return await self._tool_caller.run(messages)
+        return await self._tool_caller.run(messages, input["question"])
 
     async def astream(self, input, _config=None, **_kwargs):
         messages = self._message_builder.build_initial(input)
-        async for chunk in self._tool_caller.stream(messages):
+        async for chunk in self._tool_caller.stream(messages, input["question"]):
             yield chunk
 
 
