@@ -29,11 +29,11 @@ web:
   #   - intranet.company.com
   #   - docs.company.com
 
-database:
-  url: sqlite:///./app.db
-  echo: false
-  # PostgreSQL 예시
-  # url: postgresql+asyncpg://user:password@localhost:5432/dbname
+# database:
+#   url: sqlite:///./app.db
+#   echo: false
+#   # PostgreSQL 예시
+#   # url: postgresql+asyncpg://user:password@localhost:5432/dbname
 
 logging:
   level: INFO  # DEBUG 로 변경하면 상세 로그 출력
