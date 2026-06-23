@@ -10,6 +10,7 @@ from retrievers import (
     HybridParentRetriever,
     build_hybrid_retriever,
     build_keyword_retriever,
+    build_reranker,
     build_vector_retriever,
 )
 from tools import build_rag_tools
@@ -49,10 +50,14 @@ def get_rag_retriever():
         keyword_weight=r.keyword_weight,
     )
 
+    reranker = build_reranker(r.reranker_model, r.reranker_device) if r.use_reranker else None
+
     return HybridParentRetriever(
         child_retriever=child_retriever,
         parent_docs=parent_docs,
         final_k=r.final_k,
+        reranker=reranker,
+        rerank_threshold=r.rerank_threshold,
     )
 
 

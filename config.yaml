@@ -13,8 +13,12 @@ retriever:
   parent_chunk_overlap: 200
   child_chunk_size: 300      # 임베딩/검색에 사용되는 자식 청크 크기
   child_chunk_overlap: 50
-  candidate_k: 15            # 자식 청크 검색 후보 수
-  final_k: 5                 # LLM에 전달할 최종 부모 문서 수
+  candidate_k: 15            # 자식 청크 검색 후보 수 (재순위화 입력 풀)
+  final_k: 5                 # LLM에 전달할 최종 부모 문서 수 (상한)
+  rerank_threshold: 5.5      # 이 점수 미만 문서는 제외 (관련 문서만 동적 반환, 최소 1개 보장)
+  use_reranker: true         # CrossEncoder 재순위화 사용 여부
+  reranker_model: BAAI/bge-reranker-v2-m3   # HuggingFace 크로스 인코더
+  reranker_device: auto      # auto | cuda | cpu (auto: GPU 있으면 GPU 사용)
 
 web:
   allowed_domains: null
@@ -25,11 +29,11 @@ web:
   #   - intranet.company.com
   #   - docs.company.com
 
-database:
-  url: sqlite:///./app.db
-  echo: false
-  # PostgreSQL 예시
-  # url: postgresql+asyncpg://user:password@localhost:5432/dbname
+# database:
+#   url: sqlite:///./app.db
+#   echo: false
+#   # PostgreSQL 예시
+#   # url: postgresql+asyncpg://user:password@localhost:5432/dbname
 
 logging:
   level: INFO  # DEBUG 로 변경하면 상세 로그 출력
