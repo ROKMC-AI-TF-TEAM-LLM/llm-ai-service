@@ -68,9 +68,18 @@ def ingest():
     VECTORSTORE_PATH.mkdir(parents=True, exist_ok=True)
 
     logger.info("임베딩 생성 중 (시간이 걸릴 수 있습니다)...")
+    batch_size = max(1, r.embed_batch_size)
+    total = len(all_children)
     try:
         embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL)
-        vectorstore = FAISS.from_documents(all_children, embedding=embeddings)
+        vectorstore = None
+        for start in range(0, total, batch_size):
+            batch = all_children[start : start + batch_size]
+            if vectorstore is None:
+                vectorstore = FAISS.from_documents(batch, embedding=embeddings)
+            else:
+                vectorstore.add_documents(batch)
+            logger.info(f"  임베딩 진행: {min(start + batch_size, total)}/{total}")
     except Exception as e:
         raise IngestionError(f"벡터스토어 생성 실패: {e}") from e
 

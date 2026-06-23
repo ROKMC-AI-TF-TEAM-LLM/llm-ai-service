@@ -27,6 +27,7 @@ class RetrieverSettings(BaseModel):
     parent_chunk_overlap: int = 200
     child_chunk_size: int = 300
     child_chunk_overlap: int = 50
+    embed_batch_size: int = 64  # 임베딩 시 한 번에 보낼 자식 청크 수 (GPU OOM 방지)
     candidate_k: int = 15
     final_k: int = 5
     rerank_threshold: float = 0.5
