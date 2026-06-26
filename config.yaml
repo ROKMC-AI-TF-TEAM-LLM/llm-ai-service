@@ -17,7 +17,7 @@ retriever:
   final_k: 5                 # LLM에 전달할 최종 부모 문서 수 (상한)
   rerank_threshold: 5.5      # 이 점수 미만 문서는 제외 (관련 문서만 동적 반환, 최소 1개 보장)
   use_reranker: true         # CrossEncoder 재순위화 사용 여부
-  reranker_model: BAAI/bge-reranker-v2-m3   # HuggingFace 크로스 인코더
+  reranker_model: models/bge-reranker-v2-m3   # 로컬 경로(오프라인) 또는 허브 ID(BAAI/bge-reranker-v2-m3)
   reranker_device: auto      # auto | cuda | cpu (auto: GPU 있으면 GPU 사용)
 
 web:
