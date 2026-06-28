@@ -1,6 +1,9 @@
 .cache/
 **/__pycache__/**
 
+# 대용량 로컬 모델 번들 (git 제외, 내부망 이전 시 폴더 물리 전송)
+models/
+
 
 
 *.DS_Store

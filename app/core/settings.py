@@ -36,9 +36,15 @@ class RetrieverSettings(BaseModel):
     reranker_device: str = "auto"
 
     @model_validator(mode="after")
-    def resolve_vectorstore_path(self) -> "RetrieverSettings":
+    def resolve_paths(self) -> "RetrieverSettings":
         if not self.vectorstore_path.is_absolute():
             self.vectorstore_path = _PROJECT_ROOT / self.vectorstore_path
+        # reranker_model 이 로컬에 존재하는 (상대)경로면 절대경로로 변환.
+        # 존재하지 않으면(=허브 ID) 그대로 둔다.
+        rk = Path(self.reranker_model)
+        candidate = rk if rk.is_absolute() else _PROJECT_ROOT / rk
+        if candidate.exists():
+            self.reranker_model = str(candidate)
         return self
 
 
