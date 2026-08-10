@@ -1,8 +1,14 @@
 .cache/
 **/__pycache__/**
+.venv/
+venv/
 
 # 대용량 로컬 모델 번들 (git 제외, 내부망 이전 시 폴더 물리 전송)
 models/
+
+# pip 오프라인 설치용 wheel 캐시 (용량 큼, git 제외)
+wheels/
+*.whl
 
 
 

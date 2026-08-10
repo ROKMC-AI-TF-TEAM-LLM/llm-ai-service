@@ -1,5 +1,5 @@
 llm:
-  model: gemma4:e4b
+  model: gemma4:e2b-it-qat
   temperature: 0.0
   prompt_file: rag-chat.yaml   # rag-chat.yaml | rag-exaone.yaml
 
