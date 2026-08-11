@@ -62,7 +62,7 @@ ollama list              # 등록된 모델 목록
 llm-ai-service/
 ├── config.yaml                  # 전체 설정 (LLM, retriever, reranker 등)
 ├── data/
-│   ├── raw/                     # 원본 PDF 문서
+│   ├── raw/                     # 원본 문서 (PDF, TXT)
 │   └── vectorstore/             # FAISS 인덱스 + 자식/부모 청크 캐시
 ├── eval/                        # 검색 성능 평가
 │   ├── evaluate.py              # Precision/Recall/MRR/NDCG 계산
@@ -72,7 +72,7 @@ llm-ai-service/
 ├── ollama-modelfile/            # 모델별 Ollama Modelfile
 └── app/
     ├── main.py                  # FastAPI 서버 진입점 (lifespan에서 체인 사전 로드)
-    ├── ingest.py                # PDF → Parent-Child 청킹 → 벡터스토어 인덱싱
+    ├── ingest.py                # PDF/TXT → Parent-Child 청킹 → 벡터스토어 인덱싱
     ├── api/
     │   ├── router.py            # 라우터 등록 (health, rag, rag_agent, documents)
     │   ├── routes/              # 엔드포인트별 핸들러
@@ -158,7 +158,7 @@ pip install -r requirements.txt
 
 ### 2. 문서 인덱싱
 
-`data/raw/` 디렉토리에 PDF 파일을 넣은 후 실행합니다.
+`data/raw/` 디렉토리에 PDF 또는 TXT 파일을 넣은 후 실행합니다.
 
 ```bash
 cd app

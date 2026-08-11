@@ -2,7 +2,7 @@ import pickle
 import uuid
 from pathlib import Path
 
-from langchain_community.document_loaders import PDFPlumberLoader
+from langchain_community.document_loaders import PDFPlumberLoader, TextLoader
 from langchain_community.vectorstores.faiss import FAISS
 from langchain_ollama import OllamaEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -19,13 +19,25 @@ EMBEDDING_MODEL = settings.retriever.embedding_model
 
 logger = get_logger(__name__)
 
+SUPPORTED_EXTENSIONS = ("*.pdf", "*.txt")
+
+
+def _load_documents(path: Path):
+    if path.suffix.lower() == ".pdf":
+        return PDFPlumberLoader(str(path)).load()
+    if path.suffix.lower() == ".txt":
+        return TextLoader(str(path), encoding="utf-8").load()
+    raise IngestionError(f"지원하지 않는 파일 형식입니다: {path.name}")
+
 
 def ingest():
-    pdf_files = sorted(DATA_DIR.glob("*.pdf"))
-    if not pdf_files:
-        raise IngestionError(f"PDF 파일을 찾을 수 없습니다: {DATA_DIR}")
+    source_files = sorted(
+        f for pattern in SUPPORTED_EXTENSIONS for f in DATA_DIR.glob(pattern)
+    )
+    if not source_files:
+        raise IngestionError(f"PDF/TXT 파일을 찾을 수 없습니다: {DATA_DIR}")
 
-    logger.info(f"{len(pdf_files)}개의 PDF 파일 발견: {DATA_DIR}")
+    logger.info(f"{len(source_files)}개의 파일 발견: {DATA_DIR}")
 
     r = settings.retriever
     parent_splitter = RecursiveCharacterTextSplitter(
@@ -40,16 +52,17 @@ def ingest():
     all_children = []
     parent_docs = {}
 
-    for pdf_path in pdf_files:
-        logger.info(f"로딩 중: {pdf_path.name}")
+    for source_path in source_files:
+        logger.info(f"로딩 중: {source_path.name}")
         try:
-            loader = PDFPlumberLoader(str(pdf_path))
-            pages = loader.load()
+            pages = _load_documents(source_path)
+        except IngestionError:
+            raise
         except Exception as e:
-            raise IngestionError(f"PDF 로드 실패 [{pdf_path.name}]: {e}") from e
+            raise IngestionError(f"파일 로드 실패 [{source_path.name}]: {e}") from e
 
         parents = parent_splitter.split_documents(pages)
-        pdf_child_count = 0
+        file_child_count = 0
         for parent in parents:
             parent_id = str(uuid.uuid4())
             parent.metadata["parent_id"] = parent_id
@@ -59,9 +72,9 @@ def ingest():
             for child in children:
                 child.metadata["parent_id"] = parent_id
             all_children.extend(children)
-            pdf_child_count += len(children)
+            file_child_count += len(children)
 
-        logger.info(f"  → 부모 {len(parents)}개, 자식 {pdf_child_count}개")
+        logger.info(f"  → 부모 {len(parents)}개, 자식 {file_child_count}개")
 
     logger.info(f"전체 부모: {len(parent_docs)}개, 전체 자식: {len(all_children)}개")
 
